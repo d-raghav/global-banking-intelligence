@@ -1,0 +1,114 @@
+// legend/global_bank_pipeline.pure
+// Global Banking Revenue Intelligence — Pure/Legend definitions
+// Package: model::global::banking
+// Banks: GS, JPM, BAC, WFC, MS, C (S&P500) + HDFC, SBI, ICICI, Axis, Kotak (India)
+
+Enum model::global::banking::common::Region
+{
+    US, India
+}
+
+Enum model::global::banking::common::BankSector
+{
+    INVESTMENT_BANKING,
+    UNIVERSAL_BANKING,
+    PRIVATE_SECTOR_BANK,
+    PUBLIC_SECTOR_BANK
+}
+
+Enum model::global::banking::dq::DQStatus
+{
+    PASS, FAIL, WARN
+}
+
+Class model::global::banking::dim::BankDim
+{
+    bankId           : String;
+    name             : String;
+    region           : model::global::banking::common::Region;
+    exchange         : String;
+    indexMembership  : String;          // SP500 | NIFTY50
+    sector           : model::global::banking::common::BankSector;
+    currencyNative   : String;          // USD | INR
+    isActive         : Boolean;
+}
+
+Class model::global::banking::source::RawBankRecord
+{
+    bankId       : String;
+    period       : String;              // e.g. Q1_2024
+    netRevenue   : Decimal;             // native currency
+    netIncome    : Decimal;
+    totalAssets  : Decimal;
+    nimPct[0..1] : Decimal;
+    roePct[0..1] : Decimal;
+    tier1Ratio[0..1] : Decimal;
+    sourceRef    : String;
+    loadTimestamp: DateTime;
+}
+
+Class model::global::banking::staging::StagedBankRecord
+{
+    stageId         : String;           // PK
+    bankId          : String;
+    period          : String;
+    netRevenueUsd   : Decimal;          // normalised to USD millions
+    netIncomeUsd    : Decimal;
+    totalAssetsUsd  : Decimal;
+    nimPct[0..1]    : Decimal;
+    roePct[0..1]    : Decimal;
+    tier1Ratio[0..1]: Decimal;
+    fxRateUsed      : Decimal;          // 1.0 for USD, ~83.5 for INR banks
+    dqStatus        : model::global::banking::dq::DQStatus;
+    sourceRef       : String;
+    loadedAt        : DateTime;
+}
+
+Class model::global::banking::cdw::GlobalBankFact
+{
+    factId            : String;
+    bankId            : String;
+    period            : String;
+    netRevenueUsd     : Decimal;
+    netIncomeUsd      : Decimal;
+    totalAssetsUsd    : Decimal;
+    nimPct[0..1]      : Decimal;
+    roePct[0..1]      : Decimal;
+    tier1Ratio[0..1]  : Decimal;
+    // derived
+    netMarginPct      : Decimal;        // netIncome / netRevenue * 100
+    revenueRank[0..1] : Integer;        // RANK() across all banks per period
+    regionRank[0..1]  : Integer;        // RANK() within US or India per period
+    yoyRevenuePct[0..1]: Decimal;       // LAG(4)
+    qoqRevenuePct[0..1]: Decimal;       // LAG(1)
+    stageId           : String;
+    loadedAt          : DateTime;
+}
+
+Class model::global::banking::mart::PeerComparisonMart
+{
+    martId             : String;
+    period             : String;
+    bankId             : String;
+    netRevenueUsd      : Decimal;
+    netMarginPct       : Decimal;
+    roePct[0..1]       : Decimal;
+    tier1Ratio[0..1]   : Decimal;
+    revenueRankGlobal  : Integer;
+    revenueRankRegion  : Integer;
+    vsGsRevenuePct[0..1]: Decimal;      // % vs Goldman Sachs (anchor bank)
+    refreshedAt        : DateTime;
+}
+
+Mapping model::global::banking::mapping::StagedToFact
+(
+    model::global::banking::cdw::GlobalBankFact
+        extends [model::global::banking::staging::StagedBankRecord]
+    {
+        netRevenueUsd   : $src.netRevenueUsd;
+        netIncomeUsd    : $src.netIncomeUsd;
+        totalAssetsUsd  : $src.totalAssetsUsd;
+        netMarginPct    : $src.netIncomeUsd->divide($src.netRevenueUsd)->times(100);
+        // yoyRevenuePct, qoqRevenuePct: window functions applied post-load in SQL
+    }
+)
