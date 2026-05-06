@@ -434,50 +434,104 @@ canvas { display: block; }
 </div><!-- /main -->
 
 <script>
-// ── DATA ──────────────────────────────────────────────────────────────────────
-const PERIODS = ['Q1_2024','Q2_2024','Q3_2024','Q4_2024','Q1_2025','Q2_2025'];
-const PLABELS = ['Q1\'24','Q2\'24','Q3\'24','Q4\'24','Q1\'25','Q2\'25'];
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+// Data source: fetched dynamically from global_banks_raw.json in the same repo.
+// Falls back to embedded data if fetch fails (e.g. running file:// locally).
+const DATA_URL = './data/global_banks_raw.json';
 
+// ── BANK METADATA (colors/names — not in JSON, defined here) ──────────────────
 const BANKS = {
-  GS:       {name:'Goldman Sachs', region:'US',    color:'#c9a84c'},
-  JPM:      {name:'JPMorgan',      region:'US',    color:'#4a9eff'},
-  BAC:      {name:'Bank of America',region:'US',   color:'#e05c5c'},
-  WFC:      {name:'Wells Fargo',   region:'US',    color:'#e0845c'},
-  MS:       {name:'Morgan Stanley',region:'US',    color:'#8b67f5'},
-  C:        {name:'Citigroup',     region:'US',    color:'#5ce0b4'},
-  HDFC:     {name:'HDFC Bank',     region:'India', color:'#f5c842'},
-  SBI:      {name:'SBI',           region:'India', color:'#42b8f5'},
-  ICICI:    {name:'ICICI Bank',    region:'India', color:'#f57c42'},
-  AXISBANK: {name:'Axis Bank',     region:'India', color:'#a8e063'},
-  KOTAK:    {name:'Kotak Mahindra',region:'India', color:'#e063a8'},
+  GS:       {name:'Goldman Sachs',   region:'US',    color:'#c9a84c'},
+  JPM:      {name:'JPMorgan',        region:'US',    color:'#4a9eff'},
+  BAC:      {name:'Bank of America', region:'US',    color:'#e05c5c'},
+  WFC:      {name:'Wells Fargo',     region:'US',    color:'#e0845c'},
+  MS:       {name:'Morgan Stanley',  region:'US',    color:'#8b67f5'},
+  C:        {name:'Citigroup',       region:'US',    color:'#5ce0b4'},
+  HDFC:     {name:'HDFC Bank',       region:'India', color:'#f5c842'},
+  SBI:      {name:'SBI',             region:'India', color:'#42b8f5'},
+  ICICI:    {name:'ICICI Bank',      region:'India', color:'#f57c42'},
+  AXISBANK: {name:'Axis Bank',       region:'India', color:'#a8e063'},
+  KOTAK:    {name:'Kotak Mahindra',  region:'India', color:'#e063a8'},
 };
 
 const FX = {US:1, India:8.35};
 
-// Raw data (INR crore for India, USD mn for US)
-const RAW = {
-  GS:       {rev:[14207,12730,12700,13870,15062,14580], inc:[4130,3041,2993,4110,4738,4360], roe:[14.8,10.9,10.4,14.7,16.9,15.6], nim:[null,null,null,null,null,null], t1:[15.1,15.2,15.3,15.0,15.4,15.5]},
-  JPM:      {rev:[41932,50208,43315,43740,46013,45682], inc:[13423,18149,12900,14000,14640,14200], roe:[17.0,23.0,16.0,17.0,18.0,17.5], nim:[2.71,2.62,2.59,2.61,2.67,2.65], t1:[15.3,15.3,15.3,15.7,15.7,15.8]},
-  BAC:      {rev:[25820,25389,25348,25529,27366,26800], inc:[6675,6898,6900,6730,7400,7100], roe:[9.4,9.8,9.8,9.5,10.5,10.1], nim:[1.99,1.93,1.92,1.97,2.02,2.01], t1:[13.6,13.7,13.5,13.9,14.0,14.1]},
-  WFC:      {rev:[20863,20688,20367,20378,21610,21200], inc:[4618,4909,5114,5080,4890,4700], roe:[11.2,11.5,11.7,11.7,11.3,10.8], nim:[2.81,2.75,2.69,2.73,2.78,2.75], t1:[11.9,11.9,11.9,11.9,11.9,12.1]},
-  MS:       {rev:[15139,15019,15382,16220,17741,16800], inc:[3408,3082,3188,3712,4319,3900], roe:[10.0,8.8,8.9,10.5,23.0,14.0], nim:[null,null,null,null,null,null], t1:[15.1,15.2,15.4,15.4,15.6,15.7]},
-  C:        {rev:[21104,20139,20315,19580,21601,21100], inc:[3369,3215,3238,2861,4060,3800], roe:[7.6,7.2,7.3,6.5,9.1,8.5], nim:[2.41,2.38,2.39,2.36,2.44,2.42], t1:[13.5,13.6,13.7,13.6,13.4,13.5]},
-  HDFC:     {rev:[8104,8452,8638,9016,9321,9580], inc:[3770,3821,3769,4191,4323,4400], roe:[16.5,16.8,16.4,17.2,17.1,17.0], nim:[3.44,3.46,3.40,3.46,3.35,3.32], t1:[16.2,16.5,16.8,17.2,17.7,17.9]},
-  SBI:      {rev:[12380,12810,13208,13674,14210,14650], inc:[1700,1833,1941,2068,1980,2100], roe:[21.0,21.8,20.9,19.5,18.2,17.9], nim:[3.22,3.27,3.15,3.10,3.05,3.02], t1:[10.3,10.4,10.5,10.7,10.8,11.0]},
-  ICICI:    {rev:[5452,5629,5857,6166,6352,6580], inc:[1131,1174,1170,1196,1285,1340], roe:[17.8,17.9,17.6,17.4,17.8,17.7], nim:[4.36,4.27,4.25,4.30,4.34,4.30], t1:[15.7,15.9,16.1,16.6,16.8,17.0]},
-  AXISBANK: {rev:[3247,3369,3482,3710,3840,3980], inc:[726,692,731,780,810,850], roe:[17.2,16.4,16.8,17.0,16.9,17.1], nim:[4.05,3.99,3.93,3.97,3.92,3.90], t1:[13.6,13.7,13.8,14.0,14.2,14.3]},
-  KOTAK:    {rev:[2258,2390,2474,2621,2710,2820], inc:[628,660,636,720,740,770], roe:[14.3,14.7,13.8,15.5,15.0,15.2], nim:[4.96,4.91,4.93,4.92,4.85,4.80], t1:[21.9,22.2,22.3,22.5,22.7,22.9]},
-};
+// ── RUNTIME STATE ─────────────────────────────────────────────────────────────
+let PERIODS = [];
+let PLABELS = [];
+let RAW = {};
+let activePeriodIdx = 0;
+let activeRegions = new Set(['US','India']);
+let activeMetric = 'revenue';
 
-// Normalise to USD mn
+// ── JSON → RAW transformer ────────────────────────────────────────────────────
+// Reads global_banks_raw.json and populates PERIODS, PLABELS, RAW
+function parseJSON(payload) {
+  // Derive period list from first bank's records (source of truth)
+  const firstBank = payload.banks[0];
+  PERIODS = firstBank.records.map(r => r.period);
+  PLABELS = PERIODS.map(p => {
+    // "Q1_2024" → "Q1'24"
+    const [q, y] = p.split('_');
+    return `${q}'${y.slice(2)}`;
+  });
+
+  // Build RAW lookup keyed by bank_id
+  payload.banks.forEach(bank => {
+    const id = bank.bank_id;
+    if (!BANKS[id]) return; // skip unknown banks
+
+    // Sort records by period to ensure consistent ordering
+    const recs = [...bank.records].sort((a,b) => a.period.localeCompare(b.period));
+
+    RAW[id] = {
+      rev: recs.map(r => r.net_revenue   ?? 0),
+      inc: recs.map(r => r.net_income    ?? 0),
+      roe: recs.map(r => r.roe_pct       ?? null),
+      nim: recs.map(r => r.nim_pct       ?? null),
+      t1:  recs.map(r => r.tier1_ratio   ?? null),
+    };
+  });
+
+  // Default active period = last period (most recent)
+  activePeriodIdx = PERIODS.length - 1;
+}
+
+// ── LOADING SCREEN ────────────────────────────────────────────────────────────
+function showLoader() {
+  document.body.insertAdjacentHTML('afterbegin', `
+    <div id="loader" style="
+      position:fixed;inset:0;background:#0a0c0f;z-index:9999;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+      <div style="font-family:'DM Mono',monospace;font-size:11px;color:#c9a84c;letter-spacing:0.1em;text-transform:uppercase">
+        Loading data from global_banks_raw.json
+      </div>
+      <div id="loaderDots" style="display:flex;gap:6px;">
+        ${[0,1,2].map(i=>`<div style="width:6px;height:6px;border-radius:50%;background:#c9a84c;opacity:0.3;animation:pulse 1s ${i*0.2}s infinite"></div>`).join('')}
+      </div>
+      <div id="loaderStatus" style="font-family:'DM Mono',monospace;font-size:10px;color:#4a5568"></div>
+    </div>
+    <style>@keyframes pulse{0%,100%{opacity:0.2}50%{opacity:1}}</style>
+  `);
+}
+
+function hideLoader() {
+  const el = document.getElementById('loader');
+  if (el) { el.style.opacity='0'; el.style.transition='opacity 0.4s'; setTimeout(()=>el.remove(), 400); }
+}
+
+function setLoaderStatus(msg) {
+  const el = document.getElementById('loaderStatus');
+  if (el) el.textContent = msg;
+}
+
+// ── NORMALISE to USD mn ───────────────────────────────────────────────────────
 function usd(bid, val) { return val / FX[BANKS[bid].region]; }
 function revUsd(bid) { return RAW[bid].rev.map(v => usd(bid, v)); }
 function incUsd(bid) { return RAW[bid].inc.map(v => usd(bid, v)); }
 
-// State
-let activePeriodIdx = 4; // Q1 2025
-let activeRegions = new Set(['US','India']);
-let activeMetric = 'revenue';
+// State accessor (used by period chips — needs PERIODS populated first)
+let activeRegionsSet = new Set(['US','India']);
 
 // ── PERIOD CHIPS ──────────────────────────────────────────────────────────────
 function buildPeriodChips() {
@@ -924,10 +978,47 @@ function showPage(name, btn) {
   setTimeout(renderAll, 50);
 }
 
-// ── INIT ─────────────────────────────────────────────────────────────────────
-buildPeriodChips();
-renderAll();
-window.addEventListener('resize', renderAll);
+// ── INIT — fetch JSON, parse, then render ─────────────────────────────────────
+async function init() {
+  showLoader();
+  setLoaderStatus('fetching global_banks_raw.json …');
+
+  try {
+    const res = await fetch(DATA_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const payload = await res.json();
+    setLoaderStatus(`loaded ${payload.banks.length} banks ✓`);
+    parseJSON(payload);
+  } catch (err) {
+    // Fallback: embed minimal data so dashboard still works offline
+    setLoaderStatus('fetch failed — using embedded fallback data');
+    console.warn('Could not load JSON:', err);
+    PERIODS = ['Q1_2024','Q2_2024','Q3_2024','Q4_2024','Q1_2025','Q2_2025'];
+    PLABELS = ["Q1'24","Q2'24","Q3'24","Q4'24","Q1'25","Q2'25"];
+    RAW = {
+      GS:       {rev:[14207,12730,12700,13870,15062,14580],inc:[4130,3041,2993,4110,4738,4360],roe:[14.8,10.9,10.4,14.7,16.9,15.6],nim:[null,null,null,null,null,null],t1:[15.1,15.2,15.3,15.0,15.4,15.5]},
+      JPM:      {rev:[41932,50208,43315,43740,46013,45682],inc:[13423,18149,12900,14000,14640,14200],roe:[17.0,23.0,16.0,17.0,18.0,17.5],nim:[2.71,2.62,2.59,2.61,2.67,2.65],t1:[15.3,15.3,15.3,15.7,15.7,15.8]},
+      BAC:      {rev:[25820,25389,25348,25529,27366,26800],inc:[6675,6898,6900,6730,7400,7100],roe:[9.4,9.8,9.8,9.5,10.5,10.1],nim:[1.99,1.93,1.92,1.97,2.02,2.01],t1:[13.6,13.7,13.5,13.9,14.0,14.1]},
+      WFC:      {rev:[20863,20688,20367,20378,21610,21200],inc:[4618,4909,5114,5080,4890,4700],roe:[11.2,11.5,11.7,11.7,11.3,10.8],nim:[2.81,2.75,2.69,2.73,2.78,2.75],t1:[11.9,11.9,11.9,11.9,11.9,12.1]},
+      MS:       {rev:[15139,15019,15382,16220,17741,16800],inc:[3408,3082,3188,3712,4319,3900],roe:[10.0,8.8,8.9,10.5,23.0,14.0],nim:[null,null,null,null,null,null],t1:[15.1,15.2,15.4,15.4,15.6,15.7]},
+      C:        {rev:[21104,20139,20315,19580,21601,21100],inc:[3369,3215,3238,2861,4060,3800],roe:[7.6,7.2,7.3,6.5,9.1,8.5],nim:[2.41,2.38,2.39,2.36,2.44,2.42],t1:[13.5,13.6,13.7,13.6,13.4,13.5]},
+      HDFC:     {rev:[8104,8452,8638,9016,9321,9580],inc:[3770,3821,3769,4191,4323,4400],roe:[16.5,16.8,16.4,17.2,17.1,17.0],nim:[3.44,3.46,3.40,3.46,3.35,3.32],t1:[16.2,16.5,16.8,17.2,17.7,17.9]},
+      SBI:      {rev:[12380,12810,13208,13674,14210,14650],inc:[1700,1833,1941,2068,1980,2100],roe:[21.0,21.8,20.9,19.5,18.2,17.9],nim:[3.22,3.27,3.15,3.10,3.05,3.02],t1:[10.3,10.4,10.5,10.7,10.8,11.0]},
+      ICICI:    {rev:[5452,5629,5857,6166,6352,6580],inc:[1131,1174,1170,1196,1285,1340],roe:[17.8,17.9,17.6,17.4,17.8,17.7],nim:[4.36,4.27,4.25,4.30,4.34,4.30],t1:[15.7,15.9,16.1,16.6,16.8,17.0]},
+      AXISBANK: {rev:[3247,3369,3482,3710,3840,3980],inc:[726,692,731,780,810,850],roe:[17.2,16.4,16.8,17.0,16.9,17.1],nim:[4.05,3.99,3.93,3.97,3.92,3.90],t1:[13.6,13.7,13.8,14.0,14.2,14.3]},
+      KOTAK:    {rev:[2258,2390,2474,2621,2710,2820],inc:[628,660,636,720,740,770],roe:[14.3,14.7,13.8,15.5,15.0,15.2],nim:[4.96,4.91,4.93,4.92,4.85,4.80],t1:[21.9,22.2,22.3,22.5,22.7,22.9]},
+    };
+    activePeriodIdx = PERIODS.length - 1;
+  }
+
+  await new Promise(r => setTimeout(r, 600)); // brief pause so loader is visible
+  hideLoader();
+  buildPeriodChips();
+  renderAll();
+  window.addEventListener('resize', renderAll);
+}
+
+init();
 </script>
 </body>
 </html>
